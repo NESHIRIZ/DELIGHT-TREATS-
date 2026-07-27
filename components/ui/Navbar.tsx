@@ -27,8 +27,8 @@ export default function Navbar() {
             <Link
               key={link.label}
               href={link.href}
-              className="text-sm font-medium transition-colors hover:text-pink-500"
-              style={{ color: "#1F2937" }}
+              className="text-sm font-medium relative transition-colors hover:text-pink-500 after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-pink-400 after:transition-all after:duration-300 hover:after:w-full"
+style={{ color: "#1F2937" }}
             >
               {link.label}
             </Link>
