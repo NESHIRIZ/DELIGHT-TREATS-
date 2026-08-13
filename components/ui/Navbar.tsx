@@ -56,7 +56,7 @@ style={{ color: "#1F2937" }}
               className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center"
               style={{ background: "#EC4899" }}
             >
-              0
+              
             </span>
           </button>
         </div>
