@@ -1,0 +1,260 @@
+// Delight Treats — Prisma schema
+// Database: PostgreSQL
+// Run locally ( see README-BACKEND.md):
+//   pnpm exec prisma generate
+//   pnpm exec prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Users & Sessions
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions  Session[]
+  cartItems CartItem[]
+  orders    Order[]
+  events    Event[]
+
+  @@map("users")
+}
+
+// Session-based authentication. A row here is a live login session;
+// deleting it (or letting it expire) logs the user out.
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Products
+// ---------------------------------------------------------------------------
+
+enum ProductCategory {
+  CAKES
+  CUPCAKES
+  PASTRIES
+  BREADS
+  COOKIES
+  SEASONAL
+}
+
+model Product {
+  id               String          @id @default(cuid())
+  slug             String          @unique
+  name             String
+  category         ProductCategory
+  shortDescription String
+  description      String
+  basePrice        Decimal         @db.Decimal(10, 2)
+  images           String[]
+  isCustomizable   Boolean         @default(false)
+  allergens        String[]
+  leadTimeDays     Int             @default(0)
+  featured         Boolean         @default(false)
+  rating           Decimal?        @db.Decimal(2, 1)
+  reviewCount      Int             @default(0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  sizeOptions   SizeOption[]
+  flavorOptions FlavorOption[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+
+  @@index([category])
+  @@map("products")
+}
+
+// A selectable size for a customizable product (e.g. "8-inch", "+$14.00").
+model SizeOption {
+  id             String  @id @default(cuid())
+  productId      String
+  label          String
+  priceModifier  Decimal @db.Decimal(10, 2)
+  servesLabel    String?
+  sortOrder      Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("size_options")
+}
+
+// A selectable flavor for a customizable product.
+model FlavorOption {
+  id            String  @id @default(cuid())
+  productId     String
+  label         String
+  priceModifier Decimal @db.Decimal(10, 2)
+  sortOrder     Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("flavor_options")
+}
+
+// ---------------------------------------------------------------------------
+// Cart
+// ---------------------------------------------------------------------------
+
+// One line item in a user's cart. Customization is captured directly on the
+// row (rather than as free-standing JSON) so it survives independently of
+// the product's current option list — if a product's options change later,
+// existing cart lines keep their originally-selected labels/prices.
+model CartItem {
+  id                 String   @id @default(cuid())
+  userId             String
+  productId          String
+  sizeLabel          String?
+  flavorLabel        String?
+  quantity           Int      @default(1)
+  specialRequests    String?
+  unitPrice          Decimal  @db.Decimal(10, 2)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("cart_items")
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  RECEIVED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum FulfillmentType {
+  PICKUP
+  DELIVERY
+}
+
+model Order {
+  id                     String          @id @default(cuid())
+  orderNumber            String          @unique
+  userId                 String
+  status                 OrderStatus     @default(RECEIVED)
+  fulfillmentType        FulfillmentType @default(PICKUP)
+  pickupOrDeliveryDate   DateTime?
+  deliveryAddress        String?
+  contactName            String
+  contactPhone           String
+  contactEmail           String
+  notes                  String?
+  subtotal               Decimal         @db.Decimal(10, 2)
+  total                  Decimal         @db.Decimal(10, 2)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
+}
+
+// A line item on a placed order. Like CartItem, customization is captured
+// directly on the row — this is the permanent record of what was ordered,
+// so it must never change even if the source Product is edited or deleted.
+model OrderItem {
+  id              String  @id @default(cuid())
+  orderId         String
+  productId       String?
+  productName     String
+  sizeLabel       String?
+  flavorLabel     String?
+  quantity        Int
+  specialRequests String?
+  unitPrice       Decimal @db.Decimal(10, 2)
+  lineTotal       Decimal @db.Decimal(10, 2)
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+enum EventType {
+  WEDDING
+  BIRTHDAY
+  CORPORATE
+  BABY_SHOWER
+  OTHER
+}
+
+enum EventStatus {
+  PLANNING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model Event {
+  id                  String      @id @default(cuid())
+  userId              String
+  name                String
+  type                EventType
+  status              EventStatus @default(PLANNING)
+  date                DateTime
+  guestCountEstimate  Int
+  requirements        String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guests Guest[]
+
+  @@index([userId])
+  @@map("events")
+}
+
+model Guest {
+  id            String  @id @default(cuid())
+  eventId       String
+  name          String
+  count         Int     @default(1)
+  dietaryNotes  String?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("guests")
+}
